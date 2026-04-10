@@ -1,0 +1,54 @@
+name: 🚀 Feature Request
+description: Propose a new feature or architectural enhancement.
+title: "🚀 feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Propose an Enhancement
+        Ensure your feature aligns with our core principles: modularity and safe fallbacks.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: "🎯 Goal / Problem Statement"
+      description: "What problem does this solve? What is the overarching goal?"
+      placeholder: "As a [role], I want to [action], so that [benefit]..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: architecture
+    attributes:
+      label: "🏗️ Proposed Solution & Architecture"
+      description: "How should this feature work technically? Keep Separation of Concerns in mind."
+      placeholder: "Trigger/Input: ...\nCore Logic: ...\nOutput/UI: ..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: project_area
+    attributes:
+      label: "Project Area"
+      description: "Which part of the project does this affect?"
+      options:
+        - "⚙️ Backend / Core Logic"
+        - "🎨 Frontend / UI / UX"
+        - "🔌 Integrations / APIs / Plugins"
+        - "🤖 Automation / Scripts / CI"
+        - "📝 Documentation / Concept"
+        - "🤷 Unsure / General"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: degradation_check
+    attributes:
+      label: "🛡️ Architecture & Principles Check"
+      description: "Does this feature respect robust system guidelines?"
+      options:
+        - label: "**Graceful Degradation:** The feature handles missing dependencies (plugins, specific folders, external apps) without fatal errors."
+          required: false
+        - label: "**Zero Assumption:** No hardcoded absolute system paths or assumptions about the user's local environment are used."
+          required: false
