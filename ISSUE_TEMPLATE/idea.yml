@@ -1,0 +1,34 @@
+name: 💡 Quick Idea
+description: Capture a raw thought quickly before it's gone.
+title: "💡 idea: "
+labels: ["draft", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Welcome to the Brain Dump
+        Don't worry about architecture yet. Just get the idea out of your head.
+  
+  - type: textarea
+    id: idea_description
+    attributes:
+      label: "The Idea"
+      description: "What is your raw thought? Just brain dump."
+      placeholder: "I was thinking about adding..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: project_area
+    attributes:
+      label: "Project Area"
+      description: "Which part of the project does this relate to? (Guess if unsure)"
+      options:
+        - "⚙️ Backend / Core Logic"
+        - "🎨 Frontend / UI / UX"
+        - "🔌 Integrations / APIs / Plugins"
+        - "🤖 Automation / Scripts / CI"
+        - "📝 Documentation / Concept"
+        - "🤷 Unsure / General"
+    validations:
+      required: true
