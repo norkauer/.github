@@ -1,13 +1,40 @@
 name: 🚀 Feature Request
-description: Propose a new feature or architectural enhancement.
+description: Propose a new feature or functionality.
 title: "🚀 feat: "
 labels: ["enhancement", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        ### Propose an Enhancement
-        Ensure your feature aligns with our core principles: modularity and safe fallbacks.
+        ### Propose a New Feature
+        Use this template to suggest new functionality. Ensure your proposal aligns with our core principles of modularity and safe fallbacks.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "🚨 Priority"
+      description: "How important is this feature for the project's roadmap?"
+      options:
+        - "🟢 Low (Nice to have, edge-case improvement)"
+        - "🟡 Medium (Valuable addition for a majority of users)"
+        - "🔴 High (Core functionality, blocking other systems)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: project_area
+    attributes:
+      label: "📂 Project Area"
+      description: "Which part of the project does this affect primarily?"
+      options:
+        - "⚙️ Backend / Core Logic"
+        - "🎨 Frontend / UI / UX"
+        - "🔌 Integrations / APIs / Plugins"
+        - "🤖 Automation / CI / Tooling"
+        - "📝 Documentation / Concept"
+        - "🤷 Unsure / General"
+    validations:
+      required: true
 
   - type: textarea
     id: goal
@@ -27,28 +54,23 @@ body:
     validations:
       required: true
 
-  - type: dropdown
-    id: project_area
+  - type: textarea
+    id: tasks
     attributes:
-      label: "Project Area"
-      description: "Which part of the project does this affect?"
-      options:
-        - "⚙️ Backend / Core Logic"
-        - "🎨 Frontend / UI / UX"
-        - "🔌 Integrations / APIs / Plugins"
-        - "🤖 Automation / Scripts / CI"
-        - "📝 Documentation / Concept"
-        - "🤷 Unsure / General"
+      label: "📌 ToDo List"
+      description: "Draft a preliminary task list for implementing this feature."
+      value: |
+        - [ ] 
     validations:
-      required: true
+      required: false
 
   - type: checkboxes
-    id: degradation_check
+    id: quality_check
     attributes:
-      label: "🛡️ Architecture & Principles Check"
-      description: "Does this feature respect robust system guidelines?"
+      label: "🛡️ General Quality Check"
+      description: "Ensure this feature adheres to general best practices."
       options:
         - label: "**Graceful Degradation:** The feature handles missing dependencies (plugins, specific folders, external apps) without fatal errors."
-          required: false
+          required: true
         - label: "**Zero Assumption:** No hardcoded absolute system paths or assumptions about the user's local environment are used."
-          required: false
+          required: true
