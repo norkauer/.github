@@ -1,43 +1,55 @@
-name: 🤖 Auto-Label Priority
-
-on:
-  issues:
-    types: [opened, edited]
-
-jobs:
-  assign-priority-label:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-    steps:
-      - name: Parse Issue Body and Manage Labels
+- name: Parse Issue Body and Manage Labels
         uses: actions/github-script@v7
         with:
           script: |
             const issueBody = context.payload.issue.body;
             if (!issueBody) return;
 
-            // Define our priority identifiers based on the YAML templates
+            // Define our priorities with explicit hex colors (without the #)
             const priorities = {
-              high: { marker: '🔴 High', label: '🔴 High' },
-              medium: { marker: '🟡 Medium', label: '🟡 Medium' },
-              low: { marker: '🟢 Low', label: '🟢 Low' }
+              high: { marker: '🔴 High', label: '🔴 High', color: 'd73a4a', description: 'High priority issue' },
+              medium: { marker: '🟡 Medium', label: '🟡 Medium', color: 'fbca04', description: 'Medium priority issue' },
+              low: { marker: '🟢 Low', label: '🟢 Low', color: '0e8a16', description: 'Low priority issue' }
             };
 
-            let targetLabel = null;
+            let targetConfig = null;
 
-            // Determine which priority was selected in the dropdown
-            if (issueBody.includes(priorities.high.marker)) targetLabel = priorities.high.label;
-            else if (issueBody.includes(priorities.medium.marker)) targetLabel = priorities.medium.label;
-            else if (issueBody.includes(priorities.low.marker)) targetLabel = priorities.low.label;
+            // Determine which priority was selected
+            if (issueBody.includes(priorities.high.marker)) targetConfig = priorities.high;
+            else if (issueBody.includes(priorities.medium.marker)) targetConfig = priorities.medium;
+            else if (issueBody.includes(priorities.low.marker)) targetConfig = priorities.low;
 
-            // If no priority is found, degrade gracefully and do nothing
-            if (!targetLabel) {
+            // Graceful degradation: If no known priority is found, do nothing
+            if (!targetConfig) {
               console.log("No priority marker found in issue body. Skipping.");
               return;
             }
 
-            // Fetch currently applied labels
+            const targetLabelName = targetConfig.label;
+
+            // ZERO ASSUMPTION: Check if the label exists in the current repo. If not, create it with the correct color.
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: targetLabelName
+              });
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`Label '${targetLabelName}' not found. Creating it dynamically...`);
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: targetLabelName,
+                  color: targetConfig.color,
+                  description: targetConfig.description
+                });
+              } else {
+                throw error; // Re-throw if it's a different API error
+              }
+            }
+
+            // Fetch currently applied labels on the issue
             const currentLabelsResponse = await github.rest.issues.listLabelsOnIssue({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -47,25 +59,25 @@ jobs:
 
             // Remove existing priority labels if they differ from the new target
             for (const key in priorities) {
-              const labelName = priorities[key].label;
-              if (currentLabels.includes(labelName) && labelName !== targetLabel) {
-                console.log(`Removing outdated label: ${labelName}`);
+              const iterLabelName = priorities[key].label;
+              if (currentLabels.includes(iterLabelName) && iterLabelName !== targetLabelName) {
+                console.log(`Removing outdated label: ${iterLabelName}`);
                 await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   issue_number: context.issue.number,
-                  name: labelName
+                  name: iterLabelName
                 });
               }
             }
 
-            // Apply the new target label if it's not already there
-            if (!currentLabels.includes(targetLabel)) {
-              console.log(`Adding new label: ${targetLabel}`);
+            // Apply the target label if it's not already applied
+            if (!currentLabels.includes(targetLabelName)) {
+              console.log(`Applying label: ${targetLabelName}`);
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                labels: [targetLabel]
+                labels: [targetLabelName]
               });
             }
