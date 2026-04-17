@@ -65,8 +65,8 @@ body:
     id: environment
     attributes:
       label: "🖥️ Environment Details"
-      description: "OS, Obsidian version, or specific plugin versions if relevant."
-      placeholder: "OS: Windows 11 / Obsidian: v1.5.12 / Dataview: v0.5.64"
+      description: "OS, runtime versions, browsers, or other environment specifics relevant to this bug."
+      placeholder: "e.g., OS: Windows 11 / Node: v20.10.0 / Browser: Chrome 122"
     validations:
       required: false
 
