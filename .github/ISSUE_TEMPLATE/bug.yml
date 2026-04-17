@@ -1,62 +1,92 @@
-name: 🐞 Bug Report
+name: 🐛 Bug Report
 description: Report a bug or unexpected behavior.
-title: "🐞 bug: "
+title: "🐛 bug: "
 labels: ["bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        ### Bug Report
-        Help us squash this bug by providing as much context as possible. 
+        ### Report a Bug
+        Help us track down the issue. Clear steps to reproduce are the most important part of this report.
 
-  - type: textarea
-    id: description
+  - type: dropdown
+    id: priority
     attributes:
-      label: "🐞 Describe the Bug"
-      description: "A clear and concise description of what the bug is. What happened?"
-      placeholder: "When executing the startup script, the system throws an error instead of loading the fallback config..."
-    validations:
-      required: true
-
-  - type: textarea
-    id: reproduction
-    attributes:
-      label: "🔄 Steps to Reproduce"
-      description: "How can we trigger this bug? Please be specific."
-      placeholder: |
-        1. Open Vault '...'
-        2. Trigger command '...'
-        3. See error '...'
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: "✅ Expected Behavior"
-      description: "What did you expect to happen instead?"
-      placeholder: "The system should gracefully fall back to the standard explorer without throwing a red error notice."
+      label: "🚨 Priority"
+      description: "How severe is this issue?"
+      options:
+        - "🟢 Low (Cosmetic issue, minor annoyance, workaround exists)"
+        - "🟡 Medium (Core feature broken, degrades workflow significantly)"
+        - "🔴 High (Data loss, fatal crash, completely unusable system)"
     validations:
       required: true
 
   - type: dropdown
     id: project_area
     attributes:
-      label: "Project Area"
-      description: "Where does this bug occur?"
+      label: "📂 Project Area"
+      description: "Where is the bug located?"
       options:
         - "⚙️ Backend / Core Logic"
         - "🎨 Frontend / UI / UX"
         - "🔌 Integrations / APIs / Plugins"
-        - "🤖 Automation / Scripts / CI"
+        - "🤖 Automation / Scripts / Tooling"
+        - "📝 Documentation / Concept"
         - "🤷 Unsure / General"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: "🔄 Steps to Reproduce"
+      description: "What exactly needs to be done to trigger the bug?"
+      placeholder: "1. Go to...\n2. Click on...\n3. See error..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: "🎯 Expected Behavior (SHOULD)"
+      description: "What did you expect to happen?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: "💥 Actual Behavior (IS)"
+      description: "What actually happened instead? Include error messages or console logs if applicable."
     validations:
       required: true
 
   - type: textarea
     id: environment
     attributes:
-      label: "🖥️ Environment / Context"
-      description: "Specify your OS, App Version, or any missing dependencies (e.g., Windows 11, Obsidian v1.5.3, no FilePilot installed)."
+      label: "🖥️ Environment Details"
+      description: "OS, Obsidian version, or specific plugin versions if relevant."
+      placeholder: "OS: Windows 11 / Obsidian: v1.5.12 / Dataview: v0.5.64"
     validations:
       required: false
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: "📌 ToDo List / Fix Steps"
+      description: "Draft a preliminary task list for debugging and fixing this bug."
+      value: |
+        - [ ] 
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: quality_check
+    attributes:
+      label: "🛡️ Bugfix Quality Check"
+      description: "Ensure the eventual fix adheres to our best practices."
+      options:
+        - label: "**Zero Assumption:** The bug will not be fixed by adding an environment-specific hack."
+          required: false
+        - label: "**Graceful Degradation:** The fix ensures that if this system fails again, it degrades gracefully instead of crashing."
+          required: false
