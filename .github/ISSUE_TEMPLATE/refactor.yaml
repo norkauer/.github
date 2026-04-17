@@ -1,0 +1,76 @@
+name: ♻️ Refactor / Improvement
+description: Restructure existing code, optimize performance, or improve an existing feature.
+title: "♻️ refactor: "
+labels: ["refactor", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ### Refactor or Improve Existing Logic
+        Use this template to propose architectural improvements, code cleanups, or performance optimizations across our projects.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "🚨 Priority"
+      description: "How urgent is resolving this technical debt or sub-optimal implementation?"
+      options:
+        - "🟢 Low (Code cleanup, minor optimizations)"
+        - "🟡 Medium (Noticeable UX/Performance improvements)"
+        - "🔴 High (Blocking other features, critical architectural flaw)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: project_area
+    attributes:
+      label: "📂 Project Area"
+      description: "Which part of the project does this affect primarily?"
+      options:
+        - "⚙️ Backend / Core Logic"
+        - "🎨 Frontend / UI / UX"
+        - "🔌 Integrations / APIs / Plugins"
+        - "🤖 Automation / CI / Tooling"
+        - "📝 Documentation / Concept"
+        - "🤷 Unsure / General"
+    validations:
+      required: true
+
+  - type: textarea
+    id: is_state
+    attributes:
+      label: "🔍 IS (Current State / Pain Point)"
+      description: "How is it currently implemented? What is the specific problem or friction?"
+      placeholder: "Currently, the logic does X, which causes Y to be slow/hard to maintain..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: should_state
+    attributes:
+      label: "🎯 SHOULD (Desired Architecture)"
+      description: "How should the system behave or be structured after this change?"
+      placeholder: "The logic should be separated into module A and module B..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: "📌 ToDo List"
+      description: "Draft a preliminary task list for this refactoring."
+      value: |
+        - [ ] 
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: quality_check
+    attributes:
+      label: "🛡️ General Quality Check"
+      description: "Ensure this refactoring adheres to general best practices."
+      options:
+        - label: "**No Hardcoded Assumptions:** The change does not introduce environment-specific absolute paths."
+          required: true
+        - label: "**No Silent Breakage:** Existing functionality, APIs, or user workflows are not broken without a clear migration plan."
+          required: true
