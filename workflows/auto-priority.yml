@@ -1,11 +1,28 @@
-- name: Parse Issue Body and Manage Labels
+name: "auto-priority labeling module"
+
+on:
+  workflow_call:
+
+permissions:
+  issues: write
+
+jobs:
+  manage-priority-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Parse Issue Body and Manage Labels
         uses: actions/github-script@v7
         with:
           script: |
             const issueBody = context.payload.issue.body;
-            if (!issueBody) return;
+            
+            // Graceful Degradation: Exit cleanly if payload is empty
+            if (!issueBody) {
+              console.log("No issue body found. Exiting gracefully.");
+              return;
+            }
 
-            // Define our priorities with explicit hex colors (without the #)
+            // Define priorities with correct emojis matching the issue templates
             const priorities = {
               high: { marker: '🔴 High', label: '🔴 High', color: 'd73a4a', description: 'High priority issue' },
               medium: { marker: '🟡 Medium', label: '🟡 Medium', color: 'fbca04', description: 'Medium priority issue' },
@@ -14,26 +31,26 @@
 
             let targetConfig = null;
 
-            // Determine which priority was selected
+            // Determine priority
             if (issueBody.includes(priorities.high.marker)) targetConfig = priorities.high;
             else if (issueBody.includes(priorities.medium.marker)) targetConfig = priorities.medium;
             else if (issueBody.includes(priorities.low.marker)) targetConfig = priorities.low;
 
-            // Graceful degradation: If no known priority is found, do nothing
             if (!targetConfig) {
-              console.log("No priority marker found in issue body. Skipping.");
+              console.log("No priority marker found in issue body. Skipping label assignment.");
               return;
             }
 
             const targetLabelName = targetConfig.label;
 
-            // ZERO ASSUMPTION: Check if the label exists in the current repo. If not, create it with the correct color.
+            // ZERO ASSUMPTION: Check if the label exists in the CALLING repo
             try {
               await github.rest.issues.getLabel({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 name: targetLabelName
               });
+              console.log(`Label '${targetLabelName}' already exists.`);
             } catch (error) {
               if (error.status === 404) {
                 console.log(`Label '${targetLabelName}' not found. Creating it dynamically...`);
@@ -45,7 +62,8 @@
                   description: targetConfig.description
                 });
               } else {
-                throw error; // Re-throw if it's a different API error
+                console.error("API error during label verification:", error);
+                return;
               }
             }
 
@@ -57,11 +75,11 @@
             });
             const currentLabels = currentLabelsResponse.data.map(l => l.name);
 
-            // Remove existing priority labels if they differ from the new target
+            // Separation of Concerns: Clean up outdated labels
             for (const key in priorities) {
               const iterLabelName = priorities[key].label;
               if (currentLabels.includes(iterLabelName) && iterLabelName !== targetLabelName) {
-                console.log(`Removing outdated label: ${iterLabelName}`);
+                console.log(`Removing outdated priority label: ${iterLabelName}`);
                 await github.rest.issues.removeLabel({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -71,9 +89,9 @@
               }
             }
 
-            // Apply the target label if it's not already applied
+            // Apply the target label
             if (!currentLabels.includes(targetLabelName)) {
-              console.log(`Applying label: ${targetLabelName}`);
+              console.log(`Applying target label: ${targetLabelName}`);
               await github.rest.issues.addLabels({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
