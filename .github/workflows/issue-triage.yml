@@ -1,18 +1,16 @@
-name: 🏷️ Issue Triage Automation
+name: 🏷️ Central Issue Triage Logic
 on:
-  issues:
-    types: [opened, edited]
+  workflow_call: # Allows for calling from other repositories
 
 jobs:
   auto-label:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     steps:
       - name: Parse Issue and Apply Labels
         uses: actions/github-script@v7
         with:
           script: |
+            // Das Event-Payload wird automatisch vom Caller an diesen Callee durchgereicht
             const body = context.payload.issue.body;
             if (!body) return;
 
