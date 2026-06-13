@@ -1,27 +1,34 @@
 name: 🏷️ Central Issue Triage Logic
 on:
-  workflow_call: # Allows for calling from other repositories
+  workflow_call:
+    inputs:
+      project_number:
+        description: "The GitHub Project V2 Number (e.g., '1')"
+        required: true
+        type: string
+    secrets:
+      PROJECT_ADMIN_TOKEN:
+        description: "PAT with 'project' and 'repo' write access"
+        required: true
 
 jobs:
-  auto-label:
+  auto-triage:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
-      - name: Parse Issue and Apply Labels
+      - name: Parse Issue and Apply Repo Labels
         uses: actions/github-script@v7
         with:
           script: |
-            // Das Event-Payload wird automatisch vom Caller an diesen Callee durchgereicht
             const body = context.payload.issue.body;
             if (!body) return;
 
             const labelsToAdd = [];
-
-            // Parse Priority Dropdown
             if (body.includes('🔴 High')) labelsToAdd.push('priority: high');
             if (body.includes('🟡 Medium')) labelsToAdd.push('priority: medium');
             if (body.includes('🟢 Low')) labelsToAdd.push('priority: low');
-
-            // Parse Project Area Dropdown
+            
             if (body.includes('⚙️ Backend')) labelsToAdd.push('area: backend');
             if (body.includes('🎨 Frontend')) labelsToAdd.push('area: frontend');
             if (body.includes('🔌 Integrations')) labelsToAdd.push('area: integrations');
@@ -36,3 +43,63 @@ jobs:
                 labels: labelsToAdd
               });
             }
+
+      - name: Update Project V2 Custom Fields
+        env:
+          GH_TOKEN: ${{ secrets.PROJECT_ADMIN_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PROJECT_NUMBER: ${{ inputs.project_number }}
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          # Graceful Degradation: Wait 5 seconds to ensure GitHub's native "Auto-add to project" workflow has linked the issue
+          sleep 5
+
+          echo "Resolving Project and Item IDs..."
+          PROJECT_NODE_ID=$(gh project view $PROJECT_NUMBER --owner "$OWNER" --format json --jq '.id')
+
+          ITEM_ID=$(gh api graphql -F owner="$OWNER" -F name="$REPO" -F number=$ISSUE_NUMBER -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                issue(number: $number) {
+                  projectItems(first: 10) {
+                    nodes {
+                      id
+                      project { number }
+                    }
+                  }
+                }
+              }
+            }' -q ".data.repository.issue.projectItems.nodes[] | select(.project.number == $PROJECT_NUMBER) | .id" || echo "")
+
+          if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
+            echo "Notice: Issue not yet added to Project $PROJECT_NUMBER. Ensure native 'Auto-add' is active on the board."
+            exit 0
+          fi
+
+          # Parse Priority
+          PRIORITY=""
+          if [[ "$BODY" == *"🔴 High"* ]]; then PRIORITY="🔴 High"
+          elif [[ "$BODY" == *"🟡 Medium"* ]]; then PRIORITY="🟡 Medium"
+          elif [[ "$BODY" == *"🟢 Low"* ]]; then PRIORITY="🟢 Low"
+          fi
+
+          if [ -n "$PRIORITY" ]; then
+            echo "Setting Priority to $PRIORITY..."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || echo "Warning: Field match failed."
+          fi
+
+          # Parse Project Area
+          AREA=""
+          if [[ "$BODY" == *"⚙️ Backend"* ]]; then AREA="⚙️ Backend / Core Logic"
+          elif [[ "$BODY" == *"🎨 Frontend"* ]]; then AREA="🎨 Frontend / UI / UX"
+          elif [[ "$BODY" == *"🔌 Integrations"* ]]; then AREA="🔌 Integrations / APIs / Plugins"
+          elif [[ "$BODY" == *"🤖 Automation"* ]]; then AREA="🤖 Automation / Scripts / Tooling"
+          elif [[ "$BODY" == *"📝 Documentation"* ]]; then AREA="📝 Documentation / Concept"
+          fi
+
+          if [ -n "$AREA" ]; then
+            echo "Setting Area to $AREA..."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || echo "Warning: Field match failed."
+          fi
