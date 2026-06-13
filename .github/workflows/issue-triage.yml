@@ -40,6 +40,7 @@ jobs:
 
           LABELS=${LABELS#,}
           if [ -n "$LABELS" ]; then
+            echo "Adding labels: $LABELS"
             gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --add-label "$LABELS" || true
           fi
 
@@ -81,14 +82,15 @@ jobs:
           fi
 
           if [ -n "$PRIORITY_KEY" ]; then
-            P_FIELD_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Priority" '.[]? | select(.name | contains($f)) | .id' | head -n 1)
-            P_OPT_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Priority" --arg o "$PRIORITY_KEY" '.[]? | select(.name | contains($f)) | .options[]? | select(.name | contains($o)) | .id' | head -n 1)
+            P_FIELD_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Priority" '.[]? | select(.name != null and (.name | contains($f))) | .id' | head -n 1)
+            P_OPT_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Priority" --arg o "$PRIORITY_KEY" '.[]? | select(.name != null and (.name | contains($f))) | .options[]? | select(.name != null and (.name | contains($o))) | .id' | head -n 1)
             
             if [ -n "$P_FIELD_ID" ] && [ "$P_FIELD_ID" != "null" ] && [ -n "$P_OPT_ID" ] && [ "$P_OPT_ID" != "null" ]; then
-              echo "Assigning Priority '$PRIORITY_KEY' (IDs found)"
+              echo "✅ Assigning Priority '$PRIORITY_KEY' (Field ID: $P_FIELD_ID, Opt ID: $P_OPT_ID)"
               gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field-id "$P_FIELD_ID" --single-select-option-id "$P_OPT_ID"
             else
-              echo "❌ Priority field/option mismatch. Schema dump required."
+              echo "❌ Priority field/option mismatch. Dumping Schema:"
+              echo "$PROJECT_FIELDS" | jq .
             fi
           fi
 
@@ -102,13 +104,14 @@ jobs:
           fi
 
           if [ -n "$AREA_KEY" ]; then
-            A_FIELD_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Area" '.[]? | select(.name | contains($f)) | .id' | head -n 1)
-            A_OPT_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Area" --arg o "$AREA_KEY" '.[]? | select(.name | contains($f)) | .options[]? | select(.name | contains($o)) | .id' | head -n 1)
+            A_FIELD_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Area" '.[]? | select(.name != null and (.name | contains($f))) | .id' | head -n 1)
+            A_OPT_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Area" --arg o "$AREA_KEY" '.[]? | select(.name != null and (.name | contains($f))) | .options[]? | select(.name != null and (.name | contains($o))) | .id' | head -n 1)
             
             if [ -n "$A_FIELD_ID" ] && [ "$A_FIELD_ID" != "null" ] && [ -n "$A_OPT_ID" ] && [ "$A_OPT_ID" != "null" ]; then
-              echo "Assigning Area '$AREA_KEY' (IDs found)"
+              echo "✅ Assigning Area '$AREA_KEY' (Field ID: $A_FIELD_ID, Opt ID: $A_OPT_ID)"
               gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field-id "$A_FIELD_ID" --single-select-option-id "$A_OPT_ID"
             else
-              echo "❌ Area field/option mismatch. Schema dump required."
+              echo "❌ Area field/option mismatch. Dumping Schema:"
+              echo "$PROJECT_FIELDS" | jq .
             fi
           fi
