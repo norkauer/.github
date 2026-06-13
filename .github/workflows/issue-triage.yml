@@ -53,30 +53,39 @@ jobs:
           PROJECT_NUMBER: ${{ inputs.project_number }}
           BODY: ${{ github.event.issue.body }}
         run: |
-          # Graceful Degradation: Wait 5 seconds to ensure GitHub's native "Auto-add to project" workflow has linked the issue
+          # Graceful Degradation: Wait 5 seconds to ensure GitHub's native "Auto-add" workflow has linked the issue
           sleep 5
 
-          echo "Resolving Project and Item IDs..."
-          PROJECT_NODE_ID=$(gh project view $PROJECT_NUMBER --owner "$OWNER" --format json --jq '.id')
-
-          ITEM_ID=$(gh api graphql -F owner="$OWNER" -F name="$REPO" -F number=$ISSUE_NUMBER -f query='
+          echo "Resolving Project and Item IDs via GraphQL (Bottom-Up Traversal)..."
+          
+          # We fetch the exact internal IDs directly from the Issue's connected project items.
+          PROJECT_DATA=$(gh api graphql -F owner="$OWNER" -F name="$REPO" -F number=$ISSUE_NUMBER -f query='
             query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
                 issue(number: $number) {
                   projectItems(first: 10) {
                     nodes {
                       id
-                      project { number }
+                      project {
+                        id
+                        number
+                      }
                     }
                   }
                 }
               }
-            }' -q ".data.repository.issue.projectItems.nodes[] | select(.project.number == $PROJECT_NUMBER) | .id" || echo "")
+            }' -q ".data.repository.issue.projectItems.nodes[] | select(.project.number == $PROJECT_NUMBER)")
 
-          if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
-            echo "Notice: Issue not yet added to Project $PROJECT_NUMBER. Ensure native 'Auto-add' is active on the board."
+          if [ -z "$PROJECT_DATA" ]; then
+            echo "Notice: Issue not yet added to Project $PROJECT_NUMBER. Ensure native 'Auto-add' is active."
             exit 0
           fi
+
+          # Extract the exact GraphQL Node IDs
+          ITEM_ID=$(echo "$PROJECT_DATA" | jq -r '.id')
+          PROJECT_NODE_ID=$(echo "$PROJECT_DATA" | jq -r '.project.id')
+
+          echo "Successfully resolved ITEM_ID and PROJECT_NODE_ID."
 
           # Parse Priority
           PRIORITY=""
@@ -87,7 +96,7 @@ jobs:
 
           if [ -n "$PRIORITY" ]; then
             echo "Setting Priority to $PRIORITY..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || echo "Warning: Field match failed."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || echo "Warning: Priority field match failed."
           fi
 
           # Parse Project Area
@@ -101,5 +110,5 @@ jobs:
 
           if [ -n "$AREA" ]; then
             echo "Setting Area to $AREA..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || echo "Warning: Field match failed."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || echo "Warning: Area field match failed."
           fi
