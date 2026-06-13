@@ -21,7 +21,9 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
           PROJECT_NUMBER: ${{ inputs.project_number }}
+          OWNER_TYPE: ${{ github.event.repository.owner.type }}
           BODY: ${{ github.event.issue.body }}
         run: |
           echo "--- 1. APPLYING REPO LABELS ---"
@@ -42,30 +44,27 @@ jobs:
             gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --add-label "$LABELS" || echo "Warning: Could not add repo labels."
           fi
 
-          echo "--- 2. ACTIVE PROJECT INJECTION ---"
-          # Dynamically build the exact URL to bypass the 'unknown owner type' CLI bug
-          OWNER_TYPE="${{ github.event.repository.owner.type }}"
+          echo "--- 2. ACTIVE PROJECT INJECTION (PURE GRAPHQL) ---"
+          echo "Resolving Project Node ID for $OWNER ($OWNER_TYPE)..."
+          
           if [ "$OWNER_TYPE" == "User" ]; then
-            PROJECT_URL="https://github.com/users/$OWNER/projects/$PROJECT_NUMBER"
+            QUERY='query($owner: String!, $number: Int!) { user(login: $owner) { projectV2(number: $number) { id } } }'
+            PROJECT_NODE_ID=$(gh api graphql -F owner="$OWNER" -F number=$PROJECT_NUMBER -f query="$QUERY" -q '.data.user.projectV2.id')
           else
-            PROJECT_URL="https://github.com/orgs/$OWNER/projects/$PROJECT_NUMBER"
+            QUERY='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { id } } }'
+            PROJECT_NODE_ID=$(gh api graphql -F owner="$OWNER" -F number=$PROJECT_NUMBER -f query="$QUERY" -q '.data.organization.projectV2.id')
           fi
-          
-          ISSUE_URL="${{ github.event.issue.html_url }}"
-          
-          echo "Target Project: $PROJECT_URL"
-          echo "Injecting Issue:  $ISSUE_URL"
 
-          # 1. Fetch Project Node ID
-          PROJECT_NODE_ID=$(gh project view "$PROJECT_URL" --format json --jq '.id' || echo "")
-          if [ -z "$PROJECT_NODE_ID" ]; then
-            echo "❌ Fatal: Could not resolve Project. Is the PROJECT_ADMIN_TOKEN valid and the PROJECT_NUMBER ($PROJECT_NUMBER) correct?"
+          if [ -z "$PROJECT_NODE_ID" ] || [ "$PROJECT_NODE_ID" == "null" ]; then
+            echo "❌ Fatal: Could not resolve Project Node ID. Check PROJECT_NUMBER."
             exit 1
           fi
 
-          # 2. Force add the issue to the project (returns existing ID if already there)
-          ITEM_ID=$(gh project item-add "$PROJECT_URL" --url "$ISSUE_URL" --format json --jq '.id' || echo "")
-          if [ -z "$ITEM_ID" ]; then
+          echo "Injecting Issue ($ISSUE_NODE_ID) into Project ($PROJECT_NODE_ID)..."
+          MUTATION='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }'
+          ITEM_ID=$(gh api graphql -f projectId="$PROJECT_NODE_ID" -f contentId="$ISSUE_NODE_ID" -f query="$MUTATION" -q '.data.addProjectV2ItemById.item.id')
+
+          if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
             echo "❌ Fatal: Could not add issue to project."
             exit 1
           fi
@@ -83,7 +82,7 @@ jobs:
 
           if [ -n "$PRIORITY" ]; then
             echo "Setting Project Priority to '$PRIORITY'..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || echo "❌ Failed to set Priority. Ensure a field named 'Priority' with the exact option '$PRIORITY' exists in your Project Settings."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "🚨 Priority" --single-select-option "$PRIORITY" || echo "❌ Failed to set Priority."
           fi
 
           # Parse Project Area
@@ -97,5 +96,5 @@ jobs:
 
           if [ -n "$AREA" ]; then
             echo "Setting Project Area to '$AREA'..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || echo "❌ Failed to set Area. Ensure a field named 'Project Area' with the exact option '$AREA' exists in your Project Settings."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "📂 Project Area" --single-select-option "$AREA" || echo "❌ Failed to set Area."
           fi
