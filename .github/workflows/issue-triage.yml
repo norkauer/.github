@@ -73,6 +73,9 @@ jobs:
 
           echo "--- 3. UPDATING PROJECT CUSTOM FIELDS ---"
           
+          echo "🔍 DUMPING PROJECT SCHEMA FOR DEBUGGING:"
+          gh project field-list "$PROJECT_URL" || echo "Warning: Could not dump schema."
+
           # Parse Priority
           PRIORITY=""
           if [[ "$BODY" == *"🔴 High"* ]]; then PRIORITY="🔴 High"
@@ -81,8 +84,13 @@ jobs:
           fi
 
           if [ -n "$PRIORITY" ]; then
-            echo "Setting Project Priority to '$PRIORITY'..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "🚨 Priority" --single-select-option "$PRIORITY" || echo "❌ Failed to set Priority."
+            echo "Extracted Priority from Issue: '$PRIORITY'"
+            echo "Attempting to assign..."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || \
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "🚨 Priority" --single-select-option "$PRIORITY" || \
+            echo "❌ Failed to set Priority. Please check the Schema Dump above to see how your field and options are exactly named."
+          else
+            echo "No Priority found in issue body."
           fi
 
           # Parse Project Area
@@ -95,6 +103,11 @@ jobs:
           fi
 
           if [ -n "$AREA" ]; then
-            echo "Setting Project Area to '$AREA'..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "📂 Project Area" --single-select-option "$AREA" || echo "❌ Failed to set Area."
+            echo "Extracted Area from Issue: '$AREA'"
+            echo "Attempting to assign..."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || \
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "📂 Project Area" --single-select-option "$AREA" || \
+            echo "❌ Failed to set Area. Please check the Schema Dump above to see how your field and options are exactly named."
+          else
+            echo "No Area found in issue body."
           fi
