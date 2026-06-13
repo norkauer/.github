@@ -14,37 +14,8 @@ on:
 jobs:
   auto-triage:
     runs-on: ubuntu-latest
-    permissions:
-      issues: write
     steps:
-      - name: Parse Issue and Apply Repo Labels
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const body = context.payload.issue.body;
-            if (!body) return;
-
-            const labelsToAdd = [];
-            if (body.includes('🔴 High')) labelsToAdd.push('priority: high');
-            if (body.includes('🟡 Medium')) labelsToAdd.push('priority: medium');
-            if (body.includes('🟢 Low')) labelsToAdd.push('priority: low');
-            
-            if (body.includes('⚙️ Backend')) labelsToAdd.push('area: backend');
-            if (body.includes('🎨 Frontend')) labelsToAdd.push('area: frontend');
-            if (body.includes('🔌 Integrations')) labelsToAdd.push('area: integrations');
-            if (body.includes('🤖 Automation')) labelsToAdd.push('area: automation');
-            if (body.includes('📝 Documentation')) labelsToAdd.push('area: documentation');
-
-            if (labelsToAdd.length > 0) {
-              await github.rest.issues.addLabels({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                labels: labelsToAdd
-              });
-            }
-
-      - name: Update Project V2 Custom Fields
+      - name: Unified Triage Automation
         env:
           GH_TOKEN: ${{ secrets.PROJECT_ADMIN_TOKEN }}
           OWNER: ${{ github.repository_owner }}
@@ -53,40 +24,70 @@ jobs:
           PROJECT_NUMBER: ${{ inputs.project_number }}
           BODY: ${{ github.event.issue.body }}
         run: |
-          # Graceful Degradation: Wait 5 seconds to ensure GitHub's native "Auto-add" workflow has linked the issue
-          sleep 5
-
-          echo "Resolving Project and Item IDs via GraphQL (Bottom-Up Traversal)..."
+          echo "--- 1. APPLYING REPO LABELS ---"
+          LABELS=""
+          if [[ "$BODY" == *"🔴 High"* ]]; then LABELS="$LABELS,priority: high"; fi
+          if [[ "$BODY" == *"🟡 Medium"* ]]; then LABELS="$LABELS,priority: medium"; fi
+          if [[ "$BODY" == *"🟢 Low"* ]]; then LABELS="$LABELS,priority: low"; fi
           
-          # We fetch the exact internal IDs directly from the Issue's connected project items.
-          PROJECT_DATA=$(gh api graphql -F owner="$OWNER" -F name="$REPO" -F number=$ISSUE_NUMBER -f query='
-            query($owner: String!, $name: String!, $number: Int!) {
-              repository(owner: $owner, name: $name) {
-                issue(number: $number) {
-                  projectItems(first: 10) {
-                    nodes {
-                      id
-                      project {
+          if [[ "$BODY" == *"⚙️ Backend"* ]]; then LABELS="$LABELS,area: backend"; fi
+          if [[ "$BODY" == *"🎨 Frontend"* ]]; then LABELS="$LABELS,area: frontend"; fi
+          if [[ "$BODY" == *"🔌 Integrations"* ]]; then LABELS="$LABELS,area: integrations"; fi
+          if [[ "$BODY" == *"🤖 Automation"* ]]; then LABELS="$LABELS,area: automation"; fi
+          if [[ "$BODY" == *"📝 Documentation"* ]]; then LABELS="$LABELS,area: documentation"; fi
+
+          # Remove leading comma if labels exist
+          LABELS=${LABELS#,}
+
+          if [ -n "$LABELS" ]; then
+            echo "Adding labels: $LABELS"
+            gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --add-label "$LABELS" || echo "Warning: Could not add repo labels."
+          else
+            echo "No matching repo labels found in body."
+          fi
+
+          echo "--- 2. RESOLVING PROJECT V2 ITEM (POLLING) ---"
+          # Polling loop ensures Graceful Degradation against GitHub backend delays
+          MAX_RETRIES=6
+          RETRY_COUNT=0
+          PROJECT_DATA=""
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Attempt $((RETRY_COUNT+1)) to fetch GraphQL Project Data..."
+            PROJECT_DATA=$(gh api graphql -F owner="$OWNER" -F name="$REPO" -F number=$ISSUE_NUMBER -f query='
+              query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  issue(number: $number) {
+                    projectItems(first: 10) {
+                      nodes {
                         id
-                        number
+                        project { id, number }
                       }
                     }
                   }
                 }
-              }
-            }' -q ".data.repository.issue.projectItems.nodes[] | select(.project.number == $PROJECT_NUMBER)")
+              }' -q ".data.repository.issue.projectItems.nodes[] | select(.project.number == $PROJECT_NUMBER)" || echo "")
+            
+            if [ -n "$PROJECT_DATA" ]; then
+              echo "Success: Item found in project!"
+              break
+            fi
+            
+            echo "Not found yet. Native Auto-Add might still be running. Waiting 5s..."
+            sleep 5
+            RETRY_COUNT=$((RETRY_COUNT+1))
+          done
 
           if [ -z "$PROJECT_DATA" ]; then
-            echo "Notice: Issue not yet added to Project $PROJECT_NUMBER. Ensure native 'Auto-add' is active."
-            exit 0
+            echo "Notice: Issue not linked to Project $PROJECT_NUMBER after 30 seconds."
+            exit 0 # Exit cleanly to not fail the CI run
           fi
 
-          # Extract the exact GraphQL Node IDs
           ITEM_ID=$(echo "$PROJECT_DATA" | jq -r '.id')
           PROJECT_NODE_ID=$(echo "$PROJECT_DATA" | jq -r '.project.id')
 
-          echo "Successfully resolved ITEM_ID and PROJECT_NODE_ID."
-
+          echo "--- 3. UPDATING PROJECT CUSTOM FIELDS ---"
+          
           # Parse Priority
           PRIORITY=""
           if [[ "$BODY" == *"🔴 High"* ]]; then PRIORITY="🔴 High"
@@ -95,8 +96,8 @@ jobs:
           fi
 
           if [ -n "$PRIORITY" ]; then
-            echo "Setting Priority to $PRIORITY..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || echo "Warning: Priority field match failed."
+            echo "Setting Project Priority to $PRIORITY..."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || echo "Warning: Priority project field match failed."
           fi
 
           # Parse Project Area
@@ -109,6 +110,6 @@ jobs:
           fi
 
           if [ -n "$AREA" ]; then
-            echo "Setting Area to $AREA..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || echo "Warning: Area field match failed."
+            echo "Setting Project Area to $AREA..."
+            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || echo "Warning: Area project field match failed."
           fi
