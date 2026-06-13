@@ -40,13 +40,10 @@ jobs:
 
           LABELS=${LABELS#,}
           if [ -n "$LABELS" ]; then
-            echo "Adding labels: $LABELS"
-            gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --add-label "$LABELS" || echo "Warning: Could not add repo labels."
+            gh issue edit "$ISSUE_NUMBER" --repo "$OWNER/$REPO" --add-label "$LABELS" || true
           fi
 
           echo "--- 2. ACTIVE PROJECT INJECTION (PURE GRAPHQL) ---"
-          echo "Resolving Project Node ID for $OWNER ($OWNER_TYPE)..."
-          
           if [ "$OWNER_TYPE" == "User" ]; then
             QUERY='query($owner: String!, $number: Int!) { user(login: $owner) { projectV2(number: $number) { id } } }'
             PROJECT_NODE_ID=$(gh api graphql -F owner="$OWNER" -F number=$PROJECT_NUMBER -f query="$QUERY" -q '.data.user.projectV2.id')
@@ -56,58 +53,62 @@ jobs:
           fi
 
           if [ -z "$PROJECT_NODE_ID" ] || [ "$PROJECT_NODE_ID" == "null" ]; then
-            echo "❌ Fatal: Could not resolve Project Node ID. Check PROJECT_NUMBER."
+            echo "❌ Fatal: Could not resolve Project Node ID."
             exit 1
           fi
 
-          echo "Injecting Issue ($ISSUE_NODE_ID) into Project ($PROJECT_NODE_ID)..."
           MUTATION='mutation($projectId: ID!, $contentId: ID!) { addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) { item { id } } }'
           ITEM_ID=$(gh api graphql -f projectId="$PROJECT_NODE_ID" -f contentId="$ISSUE_NODE_ID" -f query="$MUTATION" -q '.data.addProjectV2ItemById.item.id')
 
-          if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" == "null" ]; then
-            echo "❌ Fatal: Could not add issue to project."
-            exit 1
+          echo "✅ Resolved ITEM_ID ($ITEM_ID) and PROJECT_NODE_ID ($PROJECT_NODE_ID)."
+
+          echo "--- 3. FETCHING PROJECT SCHEMA IDS ---"
+          if [ "$OWNER_TYPE" == "User" ]; then
+            F_QUERY='query($owner: String!, $number: Int!) { user(login: $owner) { projectV2(number: $number) { fields(first: 50) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } } } } }'
+          else
+            F_QUERY='query($owner: String!, $number: Int!) { organization(login: $owner) { projectV2(number: $number) { fields(first: 50) { nodes { ... on ProjectV2SingleSelectField { id name options { id name } } } } } } }'
           fi
+          FIELDS_JSON=$(gh api graphql -F owner="$OWNER" -F number=$PROJECT_NUMBER -f query="$F_QUERY")
+          PROJECT_FIELDS=$(echo "$FIELDS_JSON" | jq '.data.user.projectV2.fields.nodes // .data.organization.projectV2.fields.nodes')
 
-          echo "✅ Successfully resolved ITEM_ID ($ITEM_ID) and PROJECT_NODE_ID ($PROJECT_NODE_ID)."
-
-          echo "--- 3. UPDATING PROJECT CUSTOM FIELDS ---"
+          echo "--- 4. MAPPING AND UPDATING FIELDS ---"
           
-          echo "🔍 DUMPING PROJECT SCHEMA FOR DEBUGGING:"
-          gh project field-list "$PROJECT_URL" || echo "Warning: Could not dump schema."
-
-          # Parse Priority
-          PRIORITY=""
-          if [[ "$BODY" == *"🔴 High"* ]]; then PRIORITY="🔴 High"
-          elif [[ "$BODY" == *"🟡 Medium"* ]]; then PRIORITY="🟡 Medium"
-          elif [[ "$BODY" == *"🟢 Low"* ]]; then PRIORITY="🟢 Low"
+          # Priority Mapping
+          PRIORITY_KEY=""
+          if [[ "$BODY" == *"🔴 High"* ]]; then PRIORITY_KEY="High"
+          elif [[ "$BODY" == *"🟡 Medium"* ]]; then PRIORITY_KEY="Medium"
+          elif [[ "$BODY" == *"🟢 Low"* ]]; then PRIORITY_KEY="Low"
           fi
 
-          if [ -n "$PRIORITY" ]; then
-            echo "Extracted Priority from Issue: '$PRIORITY'"
-            echo "Attempting to assign..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Priority" --single-select-option "$PRIORITY" || \
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "🚨 Priority" --single-select-option "$PRIORITY" || \
-            echo "❌ Failed to set Priority. Please check the Schema Dump above to see how your field and options are exactly named."
-          else
-            echo "No Priority found in issue body."
+          if [ -n "$PRIORITY_KEY" ]; then
+            P_FIELD_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Priority" '.[]? | select(.name | contains($f)) | .id' | head -n 1)
+            P_OPT_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Priority" --arg o "$PRIORITY_KEY" '.[]? | select(.name | contains($f)) | .options[]? | select(.name | contains($o)) | .id' | head -n 1)
+            
+            if [ -n "$P_FIELD_ID" ] && [ "$P_FIELD_ID" != "null" ] && [ -n "$P_OPT_ID" ] && [ "$P_OPT_ID" != "null" ]; then
+              echo "Assigning Priority '$PRIORITY_KEY' (IDs found)"
+              gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field-id "$P_FIELD_ID" --single-select-option-id "$P_OPT_ID"
+            else
+              echo "❌ Priority field/option mismatch. Schema dump required."
+            fi
           fi
 
-          # Parse Project Area
-          AREA=""
-          if [[ "$BODY" == *"⚙️ Backend"* ]]; then AREA="⚙️ Backend / Core Logic"
-          elif [[ "$BODY" == *"🎨 Frontend"* ]]; then AREA="🎨 Frontend / UI / UX"
-          elif [[ "$BODY" == *"🔌 Integrations"* ]]; then AREA="🔌 Integrations / APIs / Plugins"
-          elif [[ "$BODY" == *"🤖 Automation"* ]]; then AREA="🤖 Automation / Scripts / Tooling"
-          elif [[ "$BODY" == *"📝 Documentation"* ]]; then AREA="📝 Documentation / Concept"
+          # Area Mapping
+          AREA_KEY=""
+          if [[ "$BODY" == *"⚙️ Backend"* ]]; then AREA_KEY="Backend"
+          elif [[ "$BODY" == *"🎨 Frontend"* ]]; then AREA_KEY="Frontend"
+          elif [[ "$BODY" == *"🔌 Integrations"* ]]; then AREA_KEY="Integrations"
+          elif [[ "$BODY" == *"🤖 Automation"* ]]; then AREA_KEY="Automation"
+          elif [[ "$BODY" == *"📝 Documentation"* ]]; then AREA_KEY="Documentation"
           fi
 
-          if [ -n "$AREA" ]; then
-            echo "Extracted Area from Issue: '$AREA'"
-            echo "Attempting to assign..."
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "Project Area" --single-select-option "$AREA" || \
-            gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field "📂 Project Area" --single-select-option "$AREA" || \
-            echo "❌ Failed to set Area. Please check the Schema Dump above to see how your field and options are exactly named."
-          else
-            echo "No Area found in issue body."
+          if [ -n "$AREA_KEY" ]; then
+            A_FIELD_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Area" '.[]? | select(.name | contains($f)) | .id' | head -n 1)
+            A_OPT_ID=$(echo "$PROJECT_FIELDS" | jq -r --arg f "Area" --arg o "$AREA_KEY" '.[]? | select(.name | contains($f)) | .options[]? | select(.name | contains($o)) | .id' | head -n 1)
+            
+            if [ -n "$A_FIELD_ID" ] && [ "$A_FIELD_ID" != "null" ] && [ -n "$A_OPT_ID" ] && [ "$A_OPT_ID" != "null" ]; then
+              echo "Assigning Area '$AREA_KEY' (IDs found)"
+              gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_NODE_ID" --field-id "$A_FIELD_ID" --single-select-option-id "$A_OPT_ID"
+            else
+              echo "❌ Area field/option mismatch. Schema dump required."
+            fi
           fi
