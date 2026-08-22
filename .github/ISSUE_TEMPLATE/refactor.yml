@@ -1,7 +1,7 @@
 name: ♻️ Refactor / Improvement
 description: Restructure existing code, optimize performance, or improve an existing feature.
 title: "♻️ refactor: "
-labels: ["refactor", "triage"]
+labels: ["refactor"]
 body:
   - type: markdown
     attributes:
