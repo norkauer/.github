@@ -1,7 +1,7 @@
 name: 💡 Quick Idea
 description: Capture a raw thought quickly before it's gone.
 title: "💡 idea: "
-labels: ["draft", "triage"]
+labels: ["draft"]
 body:
   - type: markdown
     attributes:
